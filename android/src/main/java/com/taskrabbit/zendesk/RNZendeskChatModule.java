@@ -1,19 +1,26 @@
 package com.taskrabbit.zendesk;
 
 import android.app.Activity;
-import android.content.Intent;
+import android.content.Context;
+import android.content.ContextWrapper;
+import android.content.res.Configuration;
 
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
-import com.zopim.android.sdk.api.ZopimChat;
-import com.zopim.android.sdk.prechat.PreChatForm;
-import com.zopim.android.sdk.model.VisitorInfo;
-import com.zopim.android.sdk.prechat.ZopimChatActivity;
 
 import java.lang.String;
+import java.util.Locale;
+
+import zendesk.chat.Chat;
+import zendesk.chat.ChatConfiguration;
+import zendesk.chat.ChatEngine;
+import zendesk.chat.ChatProvider;
+import zendesk.chat.ProfileProvider;
+import zendesk.chat.VisitorInfo;
+import zendesk.messaging.MessagingActivity;
 
 public class RNZendeskChatModule extends ReactContextBaseJavaModule {
     private ReactContext mReactContext;
@@ -30,43 +37,45 @@ public class RNZendeskChatModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void setVisitorInfo(ReadableMap options) {
-        VisitorInfo.Builder builder = new VisitorInfo.Builder();
-
+        ProfileProvider profileProvider = Chat.INSTANCE.providers().profileProvider();
+        ChatProvider chatProvider = Chat.INSTANCE.providers().chatProvider();
+        VisitorInfo.Builder builder = VisitorInfo.builder();
         if (options.hasKey("name")) {
-            builder.name(options.getString("name"));
+            builder.withName(options.getString("name"));
         }
         if (options.hasKey("email")) {
-            builder.email(options.getString("email"));
+            builder.withEmail(options.getString("email"));
         }
         if (options.hasKey("phone")) {
-            builder.phoneNumber(options.getString("phone"));
+            builder.withPhoneNumber(options.getString("phone"));
         }
-
-        VisitorInfo visitorData = builder.build();
-
-        ZopimChat.setVisitorInfo(visitorData);
+        profileProvider.setVisitorInfo(
+                builder.build(),
+                null
+        );
+        if (options.hasKey("department")) {
+            chatProvider.setDepartment(options.getString("department"), null);
+        }
     }
 
     @ReactMethod
     public void init(String key) {
-        PreChatForm defaultPreChat = new PreChatForm.Builder()
-                .name(PreChatForm.Field.REQUIRED)
-                .email(PreChatForm.Field.REQUIRED)
-                .phoneNumber(PreChatForm.Field.REQUIRED)
-                .department(PreChatForm.Field.REQUIRED_EDITABLE)
-                .message(PreChatForm.Field.REQUIRED)
-                .build();
-        ZopimChat.init(key)
-            .preChatForm(defaultPreChat)
-            .build();
+        Chat.INSTANCE.init(mReactContext, key);
     }
 
     @ReactMethod
     public void startChat(ReadableMap options) {
-        setVisitorInfo(options);
+        setVisitorInfo(options.getMap("user"));
+        ChatConfiguration chatConfiguration = ChatConfiguration.builder()
+                .build();
         Activity activity = getCurrentActivity();
         if (activity != null) {
-            activity.startActivity(new Intent(mReactContext, ZopimChatActivity.class));
+
+            ReadableMap uiSetting = options.getMap("uiSetting");
+            Context context = new ContextWrapper(activity);
+            MessagingActivity.builder().
+                    withEngines(ChatEngine.engine())
+                    .show(context, chatConfiguration);
         }
     }
 }

@@ -7,49 +7,91 @@
 //
 
 #import "RNZendeskChatModule.h"
-#import <ZDCChat/ZDCChat.h>
+#import <ChatSDK/ChatSDK.h>
+#import <MessagingSDK/MessagingSDK.h>
+#import <ChatProvidersSDK/ChatProvidersSDK.h>
+#import <CommonUISDK/CommonUISDK.h>
+
 
 @implementation RNZendeskChatModule
+
+UIColor *navgiationBarColor;
+UIColor *navigationBarTintColor;
+UIColor *navgiationBarTitleColor;
+
++ (void) setNavigationBarBackground:(UIColor*)color tintColor:(UIColor*)tintColor titleColor:(UIColor*) titleColor {
+    navgiationBarColor = color;
+    navigationBarTintColor = tintColor;
+    navgiationBarTitleColor = titleColor;
+}
 
 RCT_EXPORT_MODULE(RNZendeskChatModule);
 
 RCT_EXPORT_METHOD(setVisitorInfo:(NSDictionary *)options) {
-  [ZDCChat updateVisitor:^(ZDCVisitorInfo *visitor) {
+    ZDKChatAPIConfiguration *chatAPIConfiguration = [[ZDKChatAPIConfiguration alloc] init];
+    NSString *name = @"";
+    NSString *email = @"";
+    NSString *phone = @"";
     if (options[@"name"]) {
-      visitor.name = options[@"name"];
+      name = options[@"name"];
     }
     if (options[@"email"]) {
-      visitor.email = options[@"email"];
+      email = options[@"email"];
     }
     if (options[@"phone"]) {
-      visitor.phone = options[@"phone"];
+      phone = options[@"phone"];
     }
-    visitor.shouldPersist = [options[@"shouldPersist"] boolValue] || NO;
-  }];
+    chatAPIConfiguration.visitorInfo = [[ZDKVisitorInfo alloc] initWithName:name
+                                                                       email:email
+                                                                 phoneNumber:phone];
+    
+    if (options[@"tags"]) {
+        chatAPIConfiguration.tags = options[@"tags"];
+    }
+    if (options[@"department"]) {
+        chatAPIConfiguration.department = options[@"department"];
+    }
+    ZDKChat.instance.configuration = chatAPIConfiguration;
 }
 
 RCT_EXPORT_METHOD(startChat:(NSDictionary *)options) {
-  [self setVisitorInfo:options];
-
-  dispatch_sync(dispatch_get_main_queue(), ^{
-    [ZDCChat startChat:^(ZDCConfig *config) {
-      if (options[@"department"]) {
-        config.department = options[@"department"];
-      }
-      if (options[@"tags"]) {
-        config.tags = options[@"tags"];
-      }
-      config.preChatDataRequirements.name       = ZDCPreChatDataRequired;
-      config.preChatDataRequirements.email      = options[@"emailNotRequired"] ? ZDCPreChatDataNotRequired : ZDCPreChatDataRequired;
-      config.preChatDataRequirements.phone      = options[@"phoneNotRequired"] ? ZDCPreChatDataNotRequired : ZDCPreChatDataRequired;
-      config.preChatDataRequirements.department = options[@"departmentNotRequired"] ? ZDCPreChatDataNotRequired : ZDCPreChatDataRequiredEditable;
-      config.preChatDataRequirements.message    = options[@"messageNotRequired"] ? ZDCPreChatDataNotRequired : ZDCPreChatDataRequired;
-    }];
-  });
+    [self setVisitorInfo:options[@"user"]];
+    NSDictionary* uiSetting = options[@"uiSetting"];
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        NSError *error = nil;
+        NSArray *engines = @[
+            (id) [ZDKChatEngine engineAndReturnError:&error]
+        ];
+        UIViewController *viewController = [ZDKMessaging.instance buildUIWithEngines:engines
+                                                                             configs:@[]
+                                                                               error:&error];
+        viewController.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle: uiSetting[@"iOSbackTitle"]
+                                                                                           style: UIBarButtonItemStylePlain
+                                                                                          target: self
+                                                                                          action: @selector(dismiss)];
+        
+        UINavigationController *chatController = [[UINavigationController alloc] initWithRootViewController: viewController];
+        chatController.navigationBar.tintColor = navigationBarTintColor;
+        chatController.navigationBar.barTintColor = navgiationBarColor;
+        chatController.navigationBar.translucent = false;
+        NSMutableDictionary *textAttributes = [[NSMutableDictionary alloc] initWithDictionary:chatController.navigationBar.titleTextAttributes];
+        [textAttributes setValue:navgiationBarTitleColor forKey:NSForegroundColorAttributeName];
+        chatController.navigationBar.titleTextAttributes = textAttributes;
+        
+        [[self rootController] presentViewController:chatController animated:true completion:nil];
+    });
 }
 
-RCT_EXPORT_METHOD(init:(NSString *)zenDeskKey) {
-  [ZDCChat initializeWithAccountKey:zenDeskKey];
+- (UIViewController*) rootController{
+    return [[UIApplication sharedApplication] windows][0].rootViewController;
+}
+
+- (void) dismiss {
+    [[self rootController] dismissViewControllerAnimated:true completion:nil];
+}
+
+RCT_EXPORT_METHOD(init:(NSString *)accountKey) {
+  [ZDKChat initializeWithAccountKey:accountKey queue:dispatch_get_main_queue()];
 }
 
 @end
